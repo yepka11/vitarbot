@@ -1,29 +1,9 @@
 {
-  "token": "YOUR_BOT_TOKEN_HERE",
-  "clientId": "YOUR_CLIENT_ID_HERE",
-  "guildId": "YOUR_GUILD_ID_HERE",
-  "ticketCategories": [
-    {
-      "label": "Technical Support",
-      "value": "tech-support",
-      "emoji": "🔧",
-      "description": "Get help with technical issues"
-    },
-    {
-      "label": "General Question",
-      "value": "general",
-      "emoji": "❓",
-      "description": "Ask general questions"
-    },
-    {
-      "label": "Report Issue",
-      "value": "report",
-      "emoji": "🚨",
-      "description": "Report bugs or issues"
-    }
-  ],
+  "token": "MTQyOTcxMDIwNDA3NzA4MDY4Ng.Ga9MVj.PmBG1B5NCqlpKsvX0jbNQqA3bMUh9R3dy-9xbA",
+  "clientId": "1429710204077080686",
+  "guildId": "1338642817647509534",
   "ticketCategoryId": null,
-  "welcomeChannelId": "YOUR_WELCOME_CHANNEL_ID",
+  "welcomeChannelId": null,
   "welcomeMessage": "Welcome {user} to {server}! 👋",
   "leaveMessage": "{user} has left the server. Goodbye! 👋"
 }
