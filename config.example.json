@@ -10,12 +10,6 @@
       "description": "Get help with technical issues"
     },
     {
-      "label": "Billing Support",
-      "value": "billing",
-      "emoji": "💰",
-      "description": "Questions about billing and payments"
-    },
-    {
       "label": "General Question",
       "value": "general",
       "emoji": "❓",
