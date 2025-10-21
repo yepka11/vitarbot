@@ -1,0 +1,35 @@
+{
+  "token": "YOUR_BOT_TOKEN_HERE",
+  "clientId": "YOUR_CLIENT_ID_HERE",
+  "guildId": "YOUR_GUILD_ID_HERE",
+  "ticketCategories": [
+    {
+      "label": "Technical Support",
+      "value": "tech-support",
+      "emoji": "🔧",
+      "description": "Get help with technical issues"
+    },
+    {
+      "label": "Billing Support",
+      "value": "billing",
+      "emoji": "💰",
+      "description": "Questions about billing and payments"
+    },
+    {
+      "label": "General Question",
+      "value": "general",
+      "emoji": "❓",
+      "description": "Ask general questions"
+    },
+    {
+      "label": "Report Issue",
+      "value": "report",
+      "emoji": "🚨",
+      "description": "Report bugs or issues"
+    }
+  ],
+  "ticketCategoryId": null,
+  "welcomeChannelId": "YOUR_WELCOME_CHANNEL_ID",
+  "welcomeMessage": "Welcome {user} to {server}! 👋",
+  "leaveMessage": "{user} has left the server. Goodbye! 👋"
+}
