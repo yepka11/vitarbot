@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ChannelType, PermissionFlagsBits, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ChannelType, PermissionFlagsBits, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const fs = require('fs');
 
 // Load configuration
@@ -20,7 +20,7 @@ const client = new Client({
   ]
 });
 
-// Store active tickets
+// Store active tickets with additional info
 const activeTickets = new Map();
 
 // Bot ready event
@@ -80,15 +80,25 @@ client.on('interactionCreate', async interaction => {
       const channel = interaction.options.getChannel('channel');
       config.welcomeChannelId = channel.id;
       fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-      await interaction.reply({ content: `✅ Welcome/leave channel set to ${channel}`, ephemeral: true });
-    }
-  } else if (interaction.isStringSelectMenu()) {
-    if (interaction.customId === 'ticket-category-select') {
-      await createTicket(interaction);
+      
+      const embed = new EmbedBuilder()
+        .setColor('#00ff00')
+        .setDescription(`✅ Welcome/leave channel set to ${channel}`)
+        .setTimestamp();
+      
+      await interaction.reply({ embeds: [embed], ephemeral: true });
     }
   } else if (interaction.isButton()) {
-    if (interaction.customId === 'close-ticket') {
+    if (interaction.customId === 'create-ticket') {
+      await showTicketModal(interaction);
+    } else if (interaction.customId === 'claim-ticket') {
+      await claimTicket(interaction);
+    } else if (interaction.customId === 'close-ticket') {
       await closeTicketButton(interaction);
+    }
+  } else if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'ticket-modal') {
+      await createTicket(interaction);
     }
   }
 });
@@ -97,56 +107,91 @@ client.on('interactionCreate', async interaction => {
 async function setupTicketPanel(interaction) {
   const embed = new EmbedBuilder()
     .setColor('#0099ff')
-    .setTitle('🎫 Create a Ticket')
-    .setDescription('Select one or more categories below to create a ticket.\nOur support team will assist you shortly!')
-    .setFooter({ text: 'Select the categories that best describe your issue' })
+    .setTitle('🎫 Support Ticket System')
+    .setDescription('Need help? Click the button below to create a support ticket.\n\nOur team will assist you as soon as possible!')
+    .addFields(
+      { name: '📋 What to expect', value: 'After creating a ticket, a private channel will be created where you can discuss your issue with our staff.', inline: false },
+      { name: '⏱️ Response Time', value: 'We typically respond within a few minutes to a few hours.', inline: false }
+    )
+    .setFooter({ text: 'Click the button below to get started' })
     .setTimestamp();
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('ticket-category-select')
-    .setPlaceholder('Select ticket categories')
-    .setMinValues(1)
-    .setMaxValues(config.ticketCategories.length);
-
-  // Add options from config
-  config.ticketCategories.forEach(category => {
-    selectMenu.addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel(category.label)
-        .setValue(category.value)
-        .setDescription(category.description)
-        .setEmoji(category.emoji)
+  const button = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('create-ticket')
+        .setLabel('Create Ticket')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎫')
     );
-  });
 
-  const row = new ActionRowBuilder().addComponents(selectMenu);
+  const setupEmbed = new EmbedBuilder()
+    .setColor('#00ff00')
+    .setDescription('✅ Ticket panel setup successfully!')
+    .setTimestamp();
 
   await interaction.reply({ 
-    content: 'Ticket panel setup successfully!', 
+    embeds: [setupEmbed], 
     ephemeral: true 
   });
 
   await interaction.channel.send({ 
     embeds: [embed], 
-    components: [row] 
+    components: [button] 
   });
+}
+
+// Show ticket modal
+async function showTicketModal(interaction) {
+  // Check if user already has an open ticket
+  const existingTicket = activeTickets.get(interaction.user.id);
+  if (existingTicket) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ You already have an open ticket! Please close it before creating a new one.')
+      .setTimestamp();
+    
+    return interaction.reply({ 
+      embeds: [embed], 
+      ephemeral: true 
+    });
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId('ticket-modal')
+    .setTitle('Create Support Ticket');
+
+  // Category select
+  const categoryInput = new TextInputBuilder()
+    .setCustomId('category')
+    .setLabel('Category')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g., General, Technical, Billing, Report')
+    .setRequired(true)
+    .setMaxLength(50);
+
+  // Description input
+  const descriptionInput = new TextInputBuilder()
+    .setCustomId('description')
+    .setLabel('Describe your problem')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('Please provide as much detail as possible...')
+    .setRequired(true)
+    .setMinLength(10)
+    .setMaxLength(1000);
+
+  const firstRow = new ActionRowBuilder().addComponents(categoryInput);
+  const secondRow = new ActionRowBuilder().addComponents(descriptionInput);
+
+  modal.addComponents(firstRow, secondRow);
+
+  await interaction.showModal(modal);
 }
 
 // Create ticket
 async function createTicket(interaction) {
-  const selectedCategories = interaction.values;
-  const categoryLabels = selectedCategories
-    .map(val => config.ticketCategories.find(cat => cat.value === val)?.label)
-    .join(', ');
-
-  // Check if user already has an open ticket
-  const existingTicket = activeTickets.get(interaction.user.id);
-  if (existingTicket) {
-    return interaction.reply({ 
-      content: '❌ You already have an open ticket! Please close it before creating a new one.', 
-      ephemeral: true 
-    });
-  }
+  const category = interaction.fields.getTextInputValue('category');
+  const description = interaction.fields.getTextInputValue('description');
 
   await interaction.deferReply({ ephemeral: true });
 
@@ -187,23 +232,37 @@ async function createTicket(interaction) {
       ]
     });
 
-    // Store ticket
-    activeTickets.set(interaction.user.id, ticketChannel.id);
+    // Store ticket with additional info
+    activeTickets.set(interaction.user.id, {
+      channelId: ticketChannel.id,
+      category: category,
+      description: description,
+      claimedBy: null
+    });
 
     // Create ticket embed
     const ticketEmbed = new EmbedBuilder()
-      .setColor('#00ff00')
-      .setTitle('🎫 Ticket Created')
-      .setDescription(`Thank you for creating a ticket, ${interaction.user}!`)
+      .setColor('#0099ff')
+      .setTitle('🎫 Support Ticket')
+      .setDescription(`Hello ${interaction.user}! Thank you for creating a ticket.\n\nPlease wait while a staff member claims your ticket.`)
       .addFields(
-        { name: 'Categories', value: categoryLabels, inline: true },
-        { name: 'Created By', value: `${interaction.user.tag}`, inline: true }
+        { name: '📌 Category', value: `\`${category}\``, inline: true },
+        { name: '👤 Created By', value: `${interaction.user.tag}`, inline: true },
+        { name: '📝 Description', value: description, inline: false },
+        { name: '🔧 Status', value: '`⏳ Waiting for staff`', inline: true },
+        { name: '👨‍💼 Claimed By', value: '`None`', inline: true }
       )
+      .setThumbnail(interaction.user.displayAvatarURL())
       .setFooter({ text: 'A staff member will be with you shortly' })
       .setTimestamp();
 
-    const closeButton = new ActionRowBuilder()
+    const buttons = new ActionRowBuilder()
       .addComponents(
+        new ButtonBuilder()
+          .setCustomId('claim-ticket')
+          .setLabel('Claim Ticket')
+          .setStyle(ButtonStyle.Success)
+          .setEmoji('✋'),
         new ButtonBuilder()
           .setCustomId('close-ticket')
           .setLabel('Close Ticket')
@@ -212,37 +271,150 @@ async function createTicket(interaction) {
       );
 
     await ticketChannel.send({ 
-      content: `${interaction.user}`, 
+      content: `${interaction.user} | @here`, 
       embeds: [ticketEmbed],
-      components: [closeButton]
+      components: [buttons]
     });
 
+    const successEmbed = new EmbedBuilder()
+      .setColor('#00ff00')
+      .setDescription(`✅ Ticket created successfully! Check ${ticketChannel}`)
+      .setTimestamp();
+
     await interaction.editReply({ 
-      content: `✅ Ticket created! Check ${ticketChannel}` 
+      embeds: [successEmbed]
     });
 
   } catch (error) {
     console.error('Error creating ticket:', error);
+    
+    const errorEmbed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ Failed to create ticket. Please contact an administrator.')
+      .setTimestamp();
+    
     await interaction.editReply({ 
-      content: '❌ Failed to create ticket. Please contact an administrator.' 
+      embeds: [errorEmbed]
     });
   }
 }
 
-// Close ticket via command
-async function closeTicket(interaction) {
-  const ticketChannelId = activeTickets.get(interaction.user.id);
-  
-  if (!ticketChannelId || interaction.channel.id !== ticketChannelId) {
+// Claim ticket
+async function claimTicket(interaction) {
+  // Check if user has admin permissions
+  if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ Only administrators can claim tickets!')
+      .setTimestamp();
+    
     return interaction.reply({ 
-      content: '❌ This command can only be used in your ticket channel!', 
+      embeds: [embed], 
       ephemeral: true 
     });
   }
 
-  await interaction.reply('🔒 Closing ticket in 5 seconds...');
+  // Find ticket info
+  const ticketEntry = Array.from(activeTickets.entries()).find(([, data]) => data.channelId === interaction.channel.id);
   
-  activeTickets.delete(interaction.user.id);
+  if (!ticketEntry) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ This ticket is not tracked in the system.')
+      .setTimestamp();
+    
+    return interaction.reply({ 
+      embeds: [embed], 
+      ephemeral: true 
+    });
+  }
+
+  const [userId, ticketData] = ticketEntry;
+
+  // Check if already claimed
+  if (ticketData.claimedBy) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription(`❌ This ticket has already been claimed by <@${ticketData.claimedBy}>!`)
+      .setTimestamp();
+    
+    return interaction.reply({ 
+      embeds: [embed], 
+      ephemeral: true 
+    });
+  }
+
+  // Update ticket data
+  ticketData.claimedBy = interaction.user.id;
+  activeTickets.set(userId, ticketData);
+
+  // Update embed
+  const member = await interaction.guild.members.fetch(userId);
+  
+  const updatedEmbed = new EmbedBuilder()
+    .setColor('#00ff00')
+    .setTitle('🎫 Support Ticket')
+    .setDescription(`Hello ${member}! Your ticket has been claimed.\n\n${interaction.user} will assist you now.`)
+    .addFields(
+      { name: '📌 Category', value: `\`${ticketData.category}\``, inline: true },
+      { name: '👤 Created By', value: `${member.user.tag}`, inline: true },
+      { name: '📝 Description', value: ticketData.description, inline: false },
+      { name: '🔧 Status', value: '`✅ Claimed`', inline: true },
+      { name: '👨‍💼 Claimed By', value: `${interaction.user}`, inline: true }
+    )
+    .setThumbnail(member.user.displayAvatarURL())
+    .setFooter({ text: `Claimed by ${interaction.user.tag}` })
+    .setTimestamp();
+
+  const closeButton = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('close-ticket')
+        .setLabel('Close Ticket')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒')
+    );
+
+  await interaction.update({ 
+    embeds: [updatedEmbed],
+    components: [closeButton]
+  });
+
+  const claimEmbed = new EmbedBuilder()
+    .setColor('#00ff00')
+    .setDescription(`✋ ${interaction.user} has claimed this ticket!`)
+    .setTimestamp();
+
+  await interaction.channel.send({ embeds: [claimEmbed] });
+}
+
+// Close ticket via command
+async function closeTicket(interaction) {
+  const ticketEntry = Array.from(activeTickets.entries()).find(([, data]) => data.channelId === interaction.channel.id);
+  
+  if (!ticketEntry) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ This command can only be used in ticket channels!')
+      .setTimestamp();
+    
+    return interaction.reply({ 
+      embeds: [embed], 
+      ephemeral: true 
+    });
+  }
+
+  const [userId] = ticketEntry;
+
+  const closeEmbed = new EmbedBuilder()
+    .setColor('#ff0000')
+    .setDescription('🔒 Closing ticket in 5 seconds...')
+    .setFooter({ text: `Closed by ${interaction.user.tag}` })
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [closeEmbed] });
+  
+  activeTickets.delete(userId);
   
   setTimeout(async () => {
     try {
@@ -255,16 +427,29 @@ async function closeTicket(interaction) {
 
 // Close ticket via button
 async function closeTicketButton(interaction) {
-  const userId = Array.from(activeTickets.entries()).find(([, channelId]) => channelId === interaction.channel.id)?.[0];
+  const ticketEntry = Array.from(activeTickets.entries()).find(([, data]) => data.channelId === interaction.channel.id);
   
-  if (!userId) {
+  if (!ticketEntry) {
+    const embed = new EmbedBuilder()
+      .setColor('#ff0000')
+      .setDescription('❌ This ticket is not tracked in the system.')
+      .setTimestamp();
+    
     return interaction.reply({ 
-      content: '❌ This ticket is not tracked in the system.', 
+      embeds: [embed], 
       ephemeral: true 
     });
   }
 
-  await interaction.reply('🔒 Closing ticket in 5 seconds...');
+  const [userId] = ticketEntry;
+
+  const closeEmbed = new EmbedBuilder()
+    .setColor('#ff0000')
+    .setDescription('🔒 Closing ticket in 5 seconds...')
+    .setFooter({ text: `Closed by ${interaction.user.tag}` })
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [closeEmbed] });
   
   activeTickets.delete(userId);
   
